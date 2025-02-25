@@ -29,20 +29,20 @@ def load_data():
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     cursor.execute("""
         WITH latest_publications AS (
-            SELECT DISTINCT ON (publication_ids) 
+            SELECT DISTINCT ON (publication_id) 
                 client_name,
                 publication_name,
-                publication_ids,
+                publication_id,
                 remove,
                 last_modified
             FROM niab.client_publication
             WHERE remove = FALSE
-            ORDER BY publication_ids, last_modified DESC
+            ORDER BY publication_id, last_modified DESC
         )
         SELECT 
             client_name,
             publication_name,
-            publication_ids,
+            publication_id,
             last_modified
         FROM latest_publications
         ORDER BY last_modified DESC
@@ -120,7 +120,7 @@ if st.session_state.page == "publications":
     # Select a row uniquely based on both publication_name and publication_id
     selected_pub = st.sidebar.selectbox(
         "Select a publication", 
-        st.session_state.data[['publication_name', 'publication_ids']].apply(lambda x: f"{x[0]} ({x[1]})", axis=1), 
+        st.session_state.data[['publication_name', 'publication_id']].apply(lambda x: f"{x[0]} ({x[1]})", axis=1), 
         index=None
     )
 
@@ -131,7 +131,7 @@ if st.session_state.page == "publications":
 
         selected_entry = st.session_state.data[
             (st.session_state.data['publication_name'] == pub_name) & 
-            (st.session_state.data['publication_ids'] == pub_id)
+            (st.session_state.data['publication_id'] == pub_id)
         ]
         
         if selected_entry.empty:
@@ -139,7 +139,7 @@ if st.session_state.page == "publications":
         else:
             client_name = st.sidebar.text_input("Client Name", selected_entry['client_name'].values[0])
             publication_name = st.sidebar.text_input("Publication Name", selected_entry['publication_name'].values[0])
-            publication_id = st.sidebar.text_input("Publication ID", selected_entry['publication_ids'].values[0])
+            publication_id = st.sidebar.text_input("Publication ID", selected_entry['publication_id'].values[0])
 
             # Update operation
             if st.sidebar.button("Update"):
@@ -150,7 +150,7 @@ if st.session_state.page == "publications":
                         # Insert new record instead of updating
                         cursor.execute("""
                             INSERT INTO niab.client_publication 
-                            (client_name, publication_name, publication_ids, remove, last_modified)
+                            (client_name, publication_name, publication_id, remove, last_modified)
                             VALUES (%s, %s, %s, FALSE, %s)
                         """, (client_name, publication_name, publication_id, datetime.datetime.now()))
                         
@@ -176,7 +176,7 @@ if st.session_state.page == "publications":
                             UPDATE niab.client_publication 
                             SET remove = TRUE, 
                                 last_modified = %s
-                            WHERE publication_ids = %s
+                            WHERE publication_id = %s
                         """, (datetime.datetime.now(), pub_id))
                         
                         conn.commit()
@@ -206,9 +206,9 @@ if st.session_state.page == "publications":
             try:
                 # Check if publication_id exists and is not removed
                 cursor.execute("""
-                    SELECT client_name, publication_name, publication_ids, remove
+                    SELECT client_name, publication_name, publication_id, remove
                     FROM niab.client_publication 
-                    WHERE publication_ids = %s AND remove = FALSE
+                    WHERE publication_id = %s AND remove = FALSE
                 """, (new_pub_id,))
                 
                 existing_active_pub = cursor.fetchone()
@@ -221,7 +221,7 @@ if st.session_state.page == "publications":
                     # In both cases, insert new record
                     cursor.execute("""
                         INSERT INTO niab.client_publication 
-                        (client_name, publication_name, publication_ids, remove, last_modified)
+                        (client_name, publication_name, publication_id, remove, last_modified)
                         VALUES (%s, %s, %s, FALSE, %s)
                     """, (new_client, new_publication, new_pub_id, datetime.datetime.now()))
                     st.success("New publication added successfully!")
