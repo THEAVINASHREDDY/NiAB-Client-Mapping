@@ -13,6 +13,8 @@ DB_PASSWORD = os.environ.get("DB_PASSWORD")
 DB_HOST = os.environ.get("DB_HOST")
 DB_PORT = os.environ.get("DB_PORT")
 
+
+
 # Connect to database
 def get_db_connection():
     return psycopg2.connect(
@@ -157,7 +159,7 @@ if st.session_state.page == "publications":
                         conn.commit()
                         st.success("Publication record appended successfully!")
                         st.session_state.data = load_data()
-                        st.experimental_rerun()
+                        st.rerun()
                     except Exception as e:
                         conn.rollback()
                         st.error(f"Error: {str(e)}")
@@ -182,7 +184,7 @@ if st.session_state.page == "publications":
                         conn.commit()
                         st.success("Publication marked as removed successfully!")
                         st.session_state.data = load_data()
-                        st.experimental_rerun()
+                        st.rerun()
                     except Exception as e:
                         conn.rollback()
                         st.error(f"Error: {str(e)}")
@@ -228,7 +230,7 @@ if st.session_state.page == "publications":
                     
                     conn.commit()
                     st.session_state.data = load_data()
-                    st.experimental_rerun()
+                    st.rerun()
                 
             except Exception as e:
                 conn.rollback()
@@ -247,9 +249,9 @@ elif st.session_state.page == "links":
         conn = get_db_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute("""
-            SELECT client, link_to_track, still_tracking
+            SELECT client_name, link_to_track, still_tracking
             FROM niab.client_engaged_leads_link
-            ORDER BY client DESC
+            ORDER BY client_name DESC
         """)
         links_data = cursor.fetchall()
         cursor.close()
@@ -258,14 +260,14 @@ elif st.session_state.page == "links":
     
     # Get unique clients
     links_df = load_links()
-    clients = sorted(links_df['client'].unique()) if not links_df.empty else []
+    clients = sorted(links_df['client_name'].unique()) if not links_df.empty else []
     
     # Client selection
     selected_client = st.selectbox("Select Client", [""] + clients)
     
     if selected_client:
         # Filter links for selected client
-        client_links = links_df[links_df['client'] == selected_client]
+        client_links = links_df[links_df['client_name'] == selected_client]
         st.write(f"Links being tracked for {selected_client}:")
         st.dataframe(client_links)
     
@@ -281,12 +283,12 @@ elif st.session_state.page == "links":
             try:
                 cursor.execute("""
                     INSERT INTO niab.client_engaged_leads_link 
-                    (client, link_to_track, still_tracking)
+                    (client_name, link_to_track, still_tracking)
                     VALUES (%s, %s, TRUE)
                 """, (new_link_client, new_link_url))
                 conn.commit()
                 st.success("Link added successfully!")
-                st.experimental_rerun()
+                st.rerun()
             except Exception as e:
                 conn.rollback()
                 st.error(f"Error: {str(e)}")
