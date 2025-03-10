@@ -5,6 +5,10 @@ import datetime
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Database connection parameters
 DB_NAME = os.environ.get("DB_NAME")
@@ -66,8 +70,10 @@ if "page" not in st.session_state:
 st.sidebar.title("Navigation")
 if st.sidebar.button("Publications"):
     st.session_state.page = "publications"
-if st.sidebar.button("Submit Links"):
+if st.sidebar.button("Submit Sponsored Links"):
     st.session_state.page = "links"
+if st.sidebar.button("ABM Lists"):
+    st.session_state.page = "abm_lists"
 
 # Create different pages based on navigation
 if st.session_state.page == "publications":
@@ -297,3 +303,151 @@ elif st.session_state.page == "links":
                 conn.close()
         else:
             st.warning("Please fill all fields!")
+
+elif st.session_state.page == "abm_lists":
+    st.title('ABM List Tracking')
+    
+    # Load ABM data
+    def load_abm_data():
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute("""
+            SELECT client_name, company, to_be_tracked, company_added_date
+            FROM niab.client_abm_tracking
+            ORDER BY client_name, company_added_date DESC
+        """)
+        abm_data = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return pd.DataFrame(abm_data)
+    
+    # Get unique clients
+    abm_df = load_abm_data()
+    clients = sorted(abm_df['client_name'].unique()) if not abm_df.empty else []
+    
+    # Client selection
+    selected_client = st.selectbox("Select Client", [""] + clients)
+    
+    if selected_client:
+        # Filter ABM lists for selected client
+        client_abm = abm_df[abm_df['client_name'] == selected_client]
+        st.write(f"ABM List for {selected_client}:")
+        st.dataframe(client_abm)
+        
+        # Toggle tracking status
+        st.subheader("Update Tracking Status")
+        companies = sorted(client_abm['company'].unique())
+        selected_company = st.selectbox("Select Company", [""] + companies)
+        
+        if selected_company:
+            current_status = client_abm[client_abm['company'] == selected_company]['to_be_tracked'].iloc[0]
+            new_status = st.checkbox("Track this company", value=current_status)
+            
+            if st.button("Update Status"):
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                try:
+                    cursor.execute("""
+                        UPDATE niab.client_abm_tracking 
+                        SET to_be_tracked = %s
+                        WHERE client_name = %s AND company = %s
+                    """, (new_status, selected_client, selected_company))
+                    conn.commit()
+                    st.success("Status updated successfully!")
+                    st.rerun()
+                except Exception as e:
+                    conn.rollback()
+                    st.error(f"Error: {str(e)}")
+                finally:
+                    cursor.close()
+                    conn.close()
+    
+    # Add companies section
+    st.markdown("---")
+    st.header("Add Companies")
+    
+    # Tabs for different addition methods
+    add_tab1, add_tab2 = st.tabs(["Upload CSV", "Add Single Company"])
+    
+    with add_tab1:
+        st.subheader("Bulk Upload Companies from CSV")
+        upload_client = st.selectbox("Select Client for Upload", [""] + sorted(st.session_state.data['client_name'].unique()), key="upload_client")
+        uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
+        
+        if uploaded_file is not None and upload_client:
+            # Read CSV file
+            try:
+                df = pd.read_csv(uploaded_file)
+                st.write("Preview of uploaded file:")
+                st.dataframe(df.head())
+                
+                # Column selection
+                columns = df.columns.tolist()
+                selected_column = st.selectbox(
+                    "Select the column containing company names:",
+                    columns
+                )
+                
+                if st.button("Upload Companies"):
+                    # Get unique companies from selected column
+                    companies_to_add = df[selected_column].dropna().unique()
+                    
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    success_count = 0
+                    error_count = 0
+                    
+                    try:
+                        for company in companies_to_add:
+                            try:
+                                cursor.execute("""
+                                    INSERT INTO niab.client_abm_tracking 
+                                    (client_name, company, to_be_tracked, company_added_date)
+                                    VALUES (%s, %s, TRUE, CURRENT_DATE)
+                                """, (upload_client, company.strip()))
+                                success_count += 1
+                            except Exception:
+                                error_count += 1
+                                continue
+                        
+                        conn.commit()
+                        st.success(f"Successfully added {success_count} companies to the ABM list!")
+                        if error_count > 0:
+                            st.warning(f"{error_count} companies could not be added (possibly duplicates)")
+                        st.rerun()
+                    except Exception as e:
+                        conn.rollback()
+                        st.error(f"Error during bulk upload: {str(e)}")
+                    finally:
+                        cursor.close()
+                        conn.close()
+            except Exception as e:
+                st.error(f"Error reading CSV file: {str(e)}")
+    
+    with add_tab2:
+        st.subheader("Add Single Company")
+        new_company_client = st.selectbox("Client", [""] + sorted(st.session_state.data['client_name'].unique()))
+        new_company_name = st.text_input("Company Name")
+        track_company = st.checkbox("Track Company", value=True)
+        
+        if st.button("Add Company"):
+            if new_company_client and new_company_name:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                try:
+                    cursor.execute("""
+                        INSERT INTO niab.client_abm_tracking 
+                        (client_name, company, to_be_tracked, company_added_date)
+                        VALUES (%s, %s, %s, CURRENT_DATE)
+                    """, (new_company_client, new_company_name, track_company))
+                    conn.commit()
+                    st.success("Company added successfully!")
+                    st.rerun()
+                except Exception as e:
+                    conn.rollback()
+                    st.error(f"Error: {str(e)}")
+                finally:
+                    cursor.close()
+                    conn.close()
+            else:
+                st.warning("Please fill all fields!")
