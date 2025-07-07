@@ -73,23 +73,18 @@ def load_publications():
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     cursor.execute("""
         WITH latest_publications AS (
-            SELECT DISTINCT ON (publication_id) 
-                client_name,
-                publication_name,
-                publication_id,
-                remove,
-                last_modified
-            FROM niab.client_publication
-            WHERE remove = FALSE
-            ORDER BY publication_id, last_modified DESC
-        )
-        SELECT 
-            client_name,
-            publication_name,
-            publication_id,
-            last_modified
-        FROM latest_publications
-        ORDER BY last_modified DESC
+             SELECT ranked_data.client_name,
+    ranked_data.publication_id,
+    ranked_data.publication_name,
+    ranked_data.last_modified
+   FROM ( SELECT cp.publication_name,
+            cp.publication_id,
+            cp.client_name,
+            cp.remove,
+            cp.last_modified,
+            row_number() OVER (PARTITION BY cp.publication_id ORDER BY cp.last_modified DESC) AS rn
+           FROM niab.client_publication cp) ranked_data
+  WHERE ranked_data.rn = 1 AND ranked_data.remove = false;
     """)
     data = cursor.fetchall()
     cursor.close()
