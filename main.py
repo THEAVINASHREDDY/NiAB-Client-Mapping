@@ -72,8 +72,7 @@ def load_publications():
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     cursor.execute("""
-        WITH latest_publications AS (
-             SELECT ranked_data.client_name,
+     SELECT ranked_data.client_name,
     ranked_data.publication_id,
     ranked_data.publication_name,
     ranked_data.last_modified
@@ -84,8 +83,8 @@ def load_publications():
             cp.last_modified,
             row_number() OVER (PARTITION BY cp.publication_id ORDER BY cp.last_modified DESC) AS rn
            FROM niab.client_publication cp) ranked_data
-  WHERE ranked_data.rn = 1 AND ranked_data.remove = false
-    """)
+  WHERE ranked_data.rn = 1 AND ranked_data.remove = false;
+  """)
     data = cursor.fetchall()
     cursor.close()
     conn.close()
