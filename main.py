@@ -84,7 +84,7 @@ def load_publications():
             cp.last_modified,
             row_number() OVER (PARTITION BY cp.publication_id ORDER BY cp.last_modified DESC) AS rn
            FROM niab.client_publication cp) ranked_data
-  WHERE ranked_data.rn = 1 AND ranked_data.remove = false;
+  WHERE ranked_data.rn = 1 AND ranked_data.remove = false
     """)
     data = cursor.fetchall()
     cursor.close()
